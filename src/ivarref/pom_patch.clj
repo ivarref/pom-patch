@@ -80,6 +80,17 @@
                                     "."
                                     new-patch)))))
 
+(defn file->current-version [input-file]
+  (with-open [input (io/input-stream (io/file input-file))]
+    (let [root (zip/xml-zip (xml/parse input))]
+      (->> root
+           (zip/children)
+           (remove string?)
+           (filter #(= :version (:tag (simplify-node %))))
+           (first)
+           :content
+           (str/join "")))))
+
 (defn set-patch-version! [{:keys [input-file output-file
                                   patch]
                            :or   {input-file  "pom.xml"
@@ -93,7 +104,9 @@
                            (str/join "\n"))]
       (if (= :repl output-file)
           new-content
-          (spit output-file new-content)))))
+          (do
+            (spit output-file new-content)
+            (println (file->current-version output-file)))))))
 
 (defn match-scm-tag? [loc]
   (let [{:keys [tag]} (simplify-node (zip/node loc))]
