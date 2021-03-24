@@ -14,7 +14,7 @@ clojure -X ivarref.pom-patch/update-tag!
 
 git add pom.xml
 git commit -m "Release $VERSION"
-git tag -a v$NEW_VERSION -m "Release v$VERSION"
+git tag -a v$VERSION -m "Release v$VERSION"
 git push --follow-tags
 
 clojure -M:deploy
