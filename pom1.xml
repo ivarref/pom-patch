@@ -4,7 +4,7 @@
   <packaging>jar</packaging>
   <groupId>ivarref</groupId>
   <artifactId>pom-patch</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.123</version>
   <name>pom-patch</name>
   <dependencies>
     <dependency>

@@ -5,7 +5,7 @@
             [clojure.string :as str]
             [clojure.walk :as walk]))
 
-; from https://ravi.pckl.me/short/functional-xml-editing-using-zippers-in-clojure/
+; adapted from https://ravi.pckl.me/short/functional-xml-editing-using-zippers-in-clojure/
 
 (defn tree-edit
   "Take a zipper, a function that matches a pattern in the tree,
@@ -50,6 +50,55 @@
                            (remove (comp empty? str/trim))
                            (str/join "\n"))]
       (spit output-file new-content))))
+
+
+(defn tree-editor
+  "Take a zipper, a function that matches a pattern in the tree,
+   and a function that edits the current location in the tree.  Examine the tree
+   nodes in depth-first order, determine whether the matcher matches, and if so
+   apply the editor."
+  [zipper matcher editor]
+  (loop [loc zipper]
+    (if (zip/end? loc)
+      (zip/root loc)
+      (if-let [matcher-result (matcher loc)]
+        (recur (zip/next (zip/edit loc editor)))
+        (recur (zip/next loc))))))
+
+
+(defn match-version? [loc]
+  (let [{:keys [tag]} (simplify-node (zip/node loc))]
+    (and (= :version tag)
+         (= :project (:tag (simplify-node (zip/node (zip/up loc))))))))
+
+(defn editor [new-patch node]
+  (let [curr-content (str/join "" (:content node))
+        [major minor _old-patch] (str/split curr-content #"\.")]
+    (assoc node :content (list (str major
+                                    "."
+                                    minor
+                                    "."
+                                    new-patch)))))
+
+(defn set-patch-version! [{:keys [input-file output-file
+                                  patch]
+                           :or   {input-file  "pom.xml"
+                                  output-file "pom.xml"}}]
+  (with-open [input (io/input-stream (io/file input-file))]
+    (let [root (zip/xml-zip (xml/parse input))
+          new-content (->> (tree-editor root match-version? (partial editor (str patch)))
+                           (xml/indent-str)
+                           (str/split-lines)
+                           (remove (comp empty? str/trim))
+                           (str/join "\n"))]
+      (if (= :repl output-file)
+          new-content
+          (spit output-file new-content)))))
+
+(comment
+  (set-patch-version! {:input-file  "pom1.xml"
+                       :output-file :repl
+                       :patch "1234"}))
 
 (comment
   (clojars-repo-only! {:input-file  "pom1.xml"
