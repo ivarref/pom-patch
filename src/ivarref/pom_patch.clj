@@ -95,10 +95,37 @@
           new-content
           (spit output-file new-content)))))
 
+(defn match-scm-tag? [loc]
+  (let [{:keys [tag]} (simplify-node (zip/node loc))]
+    (and (= :tag tag)
+         (= :scm (:tag (simplify-node (zip/node (zip/up loc))))))))
+
+(defn update-tag! [{:keys [input-file output-file]
+                    :or   {input-file  "pom.xml"
+                           output-file "pom.xml"}}]
+  (with-open [input (io/input-stream (io/file input-file))]
+    (let [root (zip/xml-zip (xml/parse input))
+          current-version (->> root
+                               (zip/children)
+                               (remove string?)
+                               (filter #(= :version (:tag (simplify-node %))))
+                               (first)
+                               :content
+                               (str/join ""))
+          new-content (->> (tree-editor root match-scm-tag?
+                                        (fn [node]
+                                          (assoc node :content (list (str "v" current-version)))))
+                           (xml/indent-str)
+                           (str/split-lines)
+                           (remove (comp empty? str/trim))
+                           (str/join "\n"))]
+      (if (= :repl output-file)
+        new-content
+        (spit output-file new-content)))))
+
 (comment
-  (set-patch-version! {:input-file  "pom1.xml"
-                       :output-file :repl
-                       :patch "1234"}))
+  (update-tag! {:input-file  "pom.xml"
+                :output-file :repl}))
 
 (comment
   (clojars-repo-only! {:input-file  "pom1.xml"
