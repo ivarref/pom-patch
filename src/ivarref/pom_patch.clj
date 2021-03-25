@@ -3,7 +3,8 @@
             [clojure.zip :as zip]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.walk :as walk]))
+            [clojure.walk :as walk]
+            [babashka.process :refer [$ check]]))
 
 ; adapted from https://ravi.pckl.me/short/functional-xml-editing-using-zippers-in-clojure/
 
@@ -91,32 +92,13 @@
            :content
            (str/join "")))))
 
-(defn set-patch-version! [{:keys [input-file output-file
-                                  patch]
-                           :or   {input-file  "pom.xml"
-                                  output-file "pom.xml"}}]
-  (with-open [input (io/input-stream (io/file input-file))]
-    (let [root (zip/xml-zip (xml/parse input))
-          new-content (->> (tree-editor root match-version? (partial editor (str patch)))
-                           (xml/indent-str)
-                           (str/split-lines)
-                           (remove (comp empty? str/trim))
-                           (str/join "\n"))]
-      (if (= :repl output-file)
-          new-content
-          (do
-            (spit output-file new-content)
-            (println (file->current-version output-file)))))))
-
 (defn match-scm-tag? [loc]
   (let [{:keys [tag]} (simplify-node (zip/node loc))]
     (and (= :tag tag)
          (= :scm (:tag (simplify-node (zip/node (zip/up loc))))))))
 
-(defn update-tag! [{:keys [input-file output-file]
-                    :or   {input-file  "pom.xml"
-                           output-file "pom.xml"}}]
-  (with-open [input (io/input-stream (io/file input-file))]
+(defn update-tag! [input-str]
+  (with-open [input (io/reader (char-array input-str))]
     (let [root (zip/xml-zip (xml/parse input))
           current-version (->> root
                                (zip/children)
@@ -132,13 +114,40 @@
                            (str/split-lines)
                            (remove (comp empty? str/trim))
                            (str/join "\n"))]
+      new-content)))
+
+(defn ->number [^String s]
+  (Long/valueOf s))
+
+(defn set-patch-version! [{:keys [input-file output-file
+                                  patch]
+                           :or   {input-file  "pom.xml"
+                                  output-file "pom.xml"}
+                           :as   opts}]
+  (with-open [input (io/input-stream (io/file input-file))]
+    (let [root (zip/xml-zip (xml/parse input))
+          commit-count (fn [] (-> ^{:out :string} ($ git rev-list --count HEAD) check :out str/split-lines first ->number))
+          patch (cond (= :commit-count+1 patch)
+                      (inc (commit-count))
+                      (= :commit-count patch)
+                      (commit-count)
+                      :else
+                      patch)
+          new-content (->> (tree-editor root match-version? (partial editor (str patch)))
+                           (xml/indent-str)
+                           (str/split-lines)
+                           (remove (comp empty? str/trim))
+                           (str/join "\n")
+                           (update-tag!))]
       (if (= :repl output-file)
         new-content
-        (spit output-file new-content)))))
+        (do
+          (spit output-file new-content)
+          (println (file->current-version output-file)))))))
 
 (comment
-  (update-tag! {:input-file  "pom.xml"
-                :output-file :repl}))
+  (set-patch-version! {:output-file :repl
+                       :patch       :commit-count+1}))
 
 (comment
   (clojars-repo-only! {:input-file  "pom1.xml"

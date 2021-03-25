@@ -3,14 +3,9 @@
 set -ex
 
 clojure -Spom
-clojure -M:jar
-
-COMMIT_COUNT="$(git rev-list --count HEAD)"
-let "NEXT_PATCH=COMMIT_COUNT+1"
-
 clojure -X ivarref.pom-patch/clojars-repo-only!
-VERSION=$(clojure -X ivarref.pom-patch/set-patch-version! :patch "$NEXT_PATCH")
-clojure -X ivarref.pom-patch/update-tag!
+clojure -M:jar
+VERSION=$(clojure -X ivarref.pom-patch/set-patch-version! :patch :commit-count+1)
 
 git add pom.xml
 git commit -m "Release $VERSION"
