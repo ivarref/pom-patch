@@ -3,8 +3,8 @@
 set -ex
 
 clojure -Spom
-clojure -X ivarref.pom-patch/clojars-repo-only!
 clojure -M:jar
+clojure -X ivarref.pom-patch/clojars-repo-only!
 VERSION=$(clojure -X ivarref.pom-patch/set-patch-version! :patch :commit-count+1)
 
 git add pom.xml

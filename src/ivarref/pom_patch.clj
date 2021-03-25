@@ -142,6 +142,7 @@
       (if (= :repl output-file)
         new-content
         (do
+          (shutdown-agents)
           (spit output-file new-content)
           (println (file->current-version output-file)))))))
 
