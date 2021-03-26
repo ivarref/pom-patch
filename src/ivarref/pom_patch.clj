@@ -146,6 +146,11 @@
           (spit output-file new-content)
           (println (file->current-version output-file)))))))
 
+(defn get-version [{:keys [input-file]
+                    :or   {input-file "pom.xml"}
+                    :as   opts}]
+  (println (file->current-version input-file)))
+
 (comment
   (set-patch-version! {:output-file :repl
                        :patch       :commit-count+1}))
