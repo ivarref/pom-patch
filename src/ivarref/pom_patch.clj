@@ -146,6 +146,30 @@
           (spit output-file new-content)
           (println (file->current-version output-file)))))))
 
+(defn set-version [v node]
+  (assoc node :content (list (str v))))
+
+(defn set-version! [{:keys [input-file output-file version]
+                     :or   {input-file  "pom.xml"
+                            output-file "pom.xml"}}]
+  (with-open [input (io/input-stream (io/file input-file))]
+    (let [root (zip/xml-zip (xml/parse input))
+          new-content (->> (tree-editor root match-version? (partial set-version (str version)))
+                           (xml/indent-str)
+                           (str/split-lines)
+                           (remove (comp empty? str/trim))
+                           (str/join "\n")
+                           (update-tag!))]
+      (if (= :repl output-file)
+        new-content
+        (do
+          (shutdown-agents)
+          (spit output-file new-content)
+          (println (file->current-version output-file)))))))
+
+(comment
+  (set-version! {:output-file :repl :version "DEV"}))
+
 (defn get-version [{:keys [input-file]
                     :or   {input-file "pom.xml"}
                     :as   opts}]

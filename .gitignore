@@ -4,4 +4,4 @@
 .nrepl-port
 target/
 *.pom.asc
-rewriting-history*.pom
+.clj-kondo/
