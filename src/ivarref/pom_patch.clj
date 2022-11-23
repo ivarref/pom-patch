@@ -97,7 +97,7 @@
     (and (= :tag tag)
          (= :scm (:tag (simplify-node (zip/node (zip/up loc))))))))
 
-(defn update-tag! [input-str]
+(defn update-tag! [version-prefix input-str]
   (with-open [input (io/reader (char-array input-str))]
     (let [root (zip/xml-zip (xml/parse input))
           current-version (->> root
@@ -109,7 +109,7 @@
                                (str/join ""))
           new-content (->> (tree-editor root match-scm-tag?
                                         (fn [node]
-                                          (assoc node :content (list (str "v" current-version)))))
+                                          (assoc node :content (list (str version-prefix current-version)))))
                            (xml/indent-str)
                            (str/split-lines)
                            (remove (comp empty? str/trim))
@@ -120,9 +120,11 @@
   (Long/valueOf s))
 
 (defn set-patch-version! [{:keys [input-file output-file
-                                  patch]
+                                  patch
+                                  version-prefix]
                            :or   {input-file  "pom.xml"
-                                  output-file "pom.xml"}
+                                  output-file "pom.xml"
+                                  version-prefix "v"}
                            :as   opts}]
   (with-open [input (io/input-stream (io/file input-file))]
     (let [root (zip/xml-zip (xml/parse input))
@@ -138,7 +140,7 @@
                            (str/split-lines)
                            (remove (comp empty? str/trim))
                            (str/join "\n")
-                           (update-tag!))]
+                           (update-tag! version-prefix))]
       (if (= :repl output-file)
         new-content
         (do
@@ -149,9 +151,10 @@
 (defn set-version [v node]
   (assoc node :content (list (str v))))
 
-(defn set-version! [{:keys [input-file output-file version]
+(defn set-version! [{:keys [input-file output-file version-prefix version]
                      :or   {input-file  "pom.xml"
-                            output-file "pom.xml"}}]
+                            output-file "pom.xml"
+                            version-prefix "v"}}]
   (with-open [input (io/input-stream (io/file input-file))]
     (let [root (zip/xml-zip (xml/parse input))
           new-content (->> (tree-editor root match-version? (partial set-version (str version)))
@@ -159,7 +162,7 @@
                            (str/split-lines)
                            (remove (comp empty? str/trim))
                            (str/join "\n")
-                           (update-tag!))]
+                           (update-tag! version-prefix))]
       (if (= :repl output-file)
         new-content
         (do
