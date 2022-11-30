@@ -258,8 +258,8 @@
                    (mapv update-line)
                    (vec))]
     (println "Creating new git tag" new-tag "for sha" git-sha-str)
-    (-> ^{:out :string} ($ ~git-cmd commit -a -m ~(str "Release " new-tag) ~new-tag) check :out println)
-    (-> ^{:out :string} ($ ~git-cmd push --follow-tags) check :out println)
+    (-> ^{:out :string} ($ ~git-cmd tag -a -m ~(str "Release " new-tag) ~new-tag) check :out println)
+    (-> ^{:out :string} ($ ~git-cmd push origin ~new-tag) check :out println)
     (when (string? out-file)
       (if dry?
         (doseq [lin lines]
@@ -267,7 +267,7 @@
             (println "Updated line:" lin)))
         (spit out-file (str/join "\n" lines)))
       (-> ^{:out :string} ($ ~git-cmd add ~out-file) check :out println)
-      (-> ^{:out :string} ($ ~git-cmd commit "Update git tag and git sha") check :out println)
+      (-> ^{:out :string} ($ ~git-cmd commit ~(str "Release " new-tag)) check :out println)
       (-> ^{:out :string} ($ ~git-cmd push) check :out println))
     nil))
 
