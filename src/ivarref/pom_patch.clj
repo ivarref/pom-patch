@@ -265,7 +265,7 @@
         (doseq [lin lines]
           (when-not (contains? (into #{} org-lines) lin)
             (println "Updated line:" lin)))
-        (spit out-file (str/join "\n" lines)))
+        (spit out-file (str (str/join "\n" lines) "\n")))
       (-> ^{:out :string} ($ ~git-cmd add ~out-file) check :out println)
       (-> ^{:out :string} ($ ~git-cmd commit -m ~(str "Release " new-tag)) check :out println)
       (-> ^{:out :string} ($ ~git-cmd push) check :out println))
