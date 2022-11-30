@@ -1,10 +1,12 @@
 (ns ivarref.pom-patch
-  (:require [clojure.data.xml :as xml]
-            [clojure.zip :as zip]
+  (:require [babashka.process :refer [$ check]]
+            [babashka.process.pprint]
+            [clojure.data.xml :as xml]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.walk :as walk]
-            [babashka.process :refer [$ check]]))
+            [clojure.zip :as zip])
+  (:import (java.util.regex Pattern)))
 
 ; adapted from https://ravi.pckl.me/short/functional-xml-editing-using-zippers-in-clojure/
 
@@ -119,16 +121,21 @@
 (defn ->number [^String s]
   (Long/valueOf s))
 
+(defn commit-count []
+  (-> ^{:out :string} ($ git rev-list --count HEAD) check :out str/split-lines first ->number))
+
+(defn git-sha []
+  (-> ^{:out :string} ($ git rev-parse --short=7 HEAD) check :out str/split-lines first))
+
 (defn set-patch-version! [{:keys [input-file output-file
                                   patch
                                   version-prefix]
-                           :or   {input-file  "pom.xml"
-                                  output-file "pom.xml"
+                           :or   {input-file     "pom.xml"
+                                  output-file    "pom.xml"
                                   version-prefix "v"}
                            :as   opts}]
   (with-open [input (io/input-stream (io/file input-file))]
     (let [root (zip/xml-zip (xml/parse input))
-          commit-count (fn [] (-> ^{:out :string} ($ git rev-list --count HEAD) check :out str/split-lines first ->number))
           patch (cond (= :commit-count+1 patch)
                       (inc (commit-count))
                       (= :commit-count patch)
@@ -152,8 +159,8 @@
   (assoc node :content (list (str v))))
 
 (defn set-version! [{:keys [input-file output-file version-prefix version]
-                     :or   {input-file  "pom.xml"
-                            output-file "pom.xml"
+                     :or   {input-file     "pom.xml"
+                            output-file    "pom.xml"
                             version-prefix "v"}}]
   (with-open [input (io/input-stream (io/file input-file))]
     (let [root (zip/xml-zip (xml/parse input))
@@ -177,6 +184,93 @@
                     :or   {input-file "pom.xml"}
                     :as   opts}]
   (println (file->current-version input-file)))
+
+(defn get-quote-value [line k]
+  (cond
+    (str/starts-with? line k)
+    (let [rst (subs line (count k))]
+      (str/join "" (->> (seq rst)
+                        (drop-while #(contains? #{\" \space} %))
+                        (take-while #(not= \" %)))))
+    (= 0 (count line))
+    nil
+
+    :else
+    (get-quote-value (subs line 1) k)))
+
+(defn replace-quote-value [line k new-val]
+  (cond
+    (not (str/includes? line k))
+    line
+
+    (str/starts-with? line k)
+    (let [rst (subs line (count k))
+          rest-of-line (str/join "" (->> (seq rst)
+                                         (drop-while #(contains? #{\" \space} %))
+                                         (drop-while #(not (contains? #{\" \space} %)))
+                                         (drop-while #(contains? #{\" \space} %))))]
+      (str k
+           " \""
+           new-val
+           "\""
+           (when-not (str/starts-with? rest-of-line "}")
+             " ")
+           rest-of-line))
+    (= 0 (count line))
+    nil
+
+    :else
+    (str (first line) (replace-quote-value (subs line 1) k new-val))))
+
+
+(comment
+  (count "8b242e8"))
+(comment
+  (replace-quote-value
+    "com.github.sikt-no/datomic-testcontainers {:git/tag \"0.1.1\" :git/sha \"8b242e8\"}"
+    ":git/tag"
+    "janei"))
+
+(defn get-kv [inp what]
+  (first (mapcat (fn [lin]
+                   (when (str/includes? lin what)
+                     [(get-quote-value lin what)]))
+                 (str/split-lines inp))))
+
+(defn update-readme! [{:keys [git-cmd input-md out-file dry?]
+                       :or   {git-cmd  "git"
+                              out-file "README.md"
+                              dry?     false}}]
+  (println "Updating README.md")
+  (let [[major minor _patch :as old-tag] (str/split (get-kv input-md ":git/tag")
+                                                    (Pattern/compile (Pattern/quote ".")))
+        new-tag (str major "." minor "." (commit-count))
+        git-sha-str (git-sha)
+        update-line (fn [line]
+                      (-> line
+                          (replace-quote-value ":git/tag" new-tag)
+                          (replace-quote-value ":git/sha" git-sha-str)))
+        org-lines (str/split-lines (or input-md (slurp "README.md")))
+        git-cmd (if dry? "echo" git-cmd)
+        lines (->> org-lines
+                   (mapv update-line)
+                   (vec))]
+    (println "Creating new git tag" new-tag "for sha" git-sha-str)
+    (-> ^{:out :string} ($ ~git-cmd commit -a ~(str new-tag) -m ~(str "Release " new-tag)) check :out println)
+    (-> ^{:out :string} ($ ~git-cmd push --follow-tags) check :out println)
+    (when (string? out-file)
+      (when-not dry?
+        (spit out-file (str/join "\n" lines)))
+      (-> ^{:out :string} ($ ~git-cmd add ~out-file) check :out println)
+      (-> ^{:out :string} ($ ~git-cmd commit "Update git tag and git sha") check :out println)
+      (-> ^{:out :string} ($ ~git-cmd push) check :out println))
+    nil))
+
+(comment
+  (update-readme!
+    {:dry?     true
+     :out-file "README.md"
+     :input-md (slurp (str "/home/ire/code/datomic-testcontainers" "/README.md"))}))
 
 (comment
   (set-patch-version! {:output-file :repl
