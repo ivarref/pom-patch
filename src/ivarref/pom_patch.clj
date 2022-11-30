@@ -249,6 +249,7 @@
         git-sha-str (git-sha)
         update-line (fn [line]
                       (-> line
+                          (str/replace "NEXT_TAG" new-tag)
                           (replace-quote-value ":git/tag" new-tag)
                           (replace-quote-value ":git/sha" git-sha-str)))
         org-lines (str/split-lines input-md)
