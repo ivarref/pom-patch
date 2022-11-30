@@ -258,7 +258,7 @@
                    (mapv update-line)
                    (vec))]
     (println "Creating new git tag" new-tag "for sha" git-sha-str)
-    (-> ^{:out :string} ($ ~git-cmd commit -a ~(str new-tag) -m ~(str "Release " new-tag)) check :out println)
+    (-> ^{:out :string} ($ ~git-cmd commit -a -m ~(str "Release " new-tag) ~new-tag) check :out println)
     (-> ^{:out :string} ($ ~git-cmd push --follow-tags) check :out println)
     (when (string? out-file)
       (if dry?
