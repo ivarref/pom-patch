@@ -242,7 +242,8 @@
                               out-file "README.md"
                               dry?     false}}]
   (println "Updating README.md")
-  (let [[major minor _patch :as old-tag] (str/split (get-kv input-md ":git/tag")
+  (let [input-md (or input-md (slurp "README.md"))
+        [major minor _patch :as old-tag] (str/split (get-kv input-md ":git/tag")
                                                     (Pattern/compile (Pattern/quote ".")))
         new-tag (str major "." minor "." (commit-count))
         git-sha-str (git-sha)
@@ -250,7 +251,7 @@
                       (-> line
                           (replace-quote-value ":git/tag" new-tag)
                           (replace-quote-value ":git/sha" git-sha-str)))
-        org-lines (str/split-lines (or input-md (slurp "README.md")))
+        org-lines (str/split-lines input-md)
         git-cmd (if dry? "echo" git-cmd)
         lines (->> org-lines
                    (mapv update-line)
@@ -259,7 +260,10 @@
     (-> ^{:out :string} ($ ~git-cmd commit -a ~(str new-tag) -m ~(str "Release " new-tag)) check :out println)
     (-> ^{:out :string} ($ ~git-cmd push --follow-tags) check :out println)
     (when (string? out-file)
-      (when-not dry?
+      (if dry?
+        (doseq [lin lines]
+          (when-not (contains? (into #{} org-lines) lin)
+            (println "Updated line:" lin)))
         (spit out-file (str/join "\n" lines)))
       (-> ^{:out :string} ($ ~git-cmd add ~out-file) check :out println)
       (-> ^{:out :string} ($ ~git-cmd commit "Update git tag and git sha") check :out println)
